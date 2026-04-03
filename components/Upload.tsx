@@ -1,5 +1,5 @@
 import { CheckCircle2, ImageIcon, UploadIcon } from 'lucide-react';
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router';
 import { PROGRESS_INTERVAL_MS, PROGRESS_STEP, REDIRECT_DELAY_MS } from 'lib/constants';
 
@@ -11,29 +11,64 @@ const Upload = ({ onComplete }: UploadProps) => {
     const [file, setFile] = useState<File | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [progress, setProgress] = useState(0);
+    const intervalRef = useRef<number | null>(null);
+    const timeoutRef = useRef<number | null>(null);
 
     const {isSignedIn } = useOutletContext<AuthContext>();
 
+    const clearTimers = useCallback(() => {
+        if (intervalRef.current !== null) {
+            window.clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+
+        if (timeoutRef.current !== null) {
+            window.clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            clearTimers();
+        };
+    }, [clearTimers]);
+
     const processFile = useCallback((selectedFile: File) => {
         if (!isSignedIn) return;
+
+        clearTimers();
 
         setFile(selectedFile);
         setProgress(0);
 
         const reader = new FileReader();
+        reader.onerror = () => {
+            setFile(null);
+            setProgress(0);
+        }
 
         reader.onload = () => {
             const base64Data = typeof reader.result === 'string' ? reader.result : '';
 
-            const intervalId = window.setInterval(() => {
+            intervalRef.current = window.setInterval(() => {
                 setProgress((prev) => {
                     const next = Math.min(prev + PROGRESS_STEP, 100);
 
                     if (next >= 100) {
-                        window.clearInterval(intervalId);
+                        if (intervalRef.current !== null) {
+                            window.clearInterval(intervalRef.current);
+                            intervalRef.current = null;
+                        }
 
-                        window.setTimeout(() => {
+                        if (timeoutRef.current !== null) {
+                            window.clearTimeout(timeoutRef.current);
+                            timeoutRef.current = null;
+                        }
+
+                        timeoutRef.current = window.setTimeout(() => {
                             onComplete?.(base64Data);
+                            timeoutRef.current = null;
                         }, REDIRECT_DELAY_MS);
                     }
 
@@ -43,7 +78,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         };
 
         reader.readAsDataURL(selectedFile);
-    }, [isSignedIn, onComplete]);
+    }, [clearTimers, isSignedIn, onComplete]);
 
     const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
         if (!isSignedIn) return;
@@ -65,10 +100,11 @@ const Upload = ({ onComplete }: UploadProps) => {
         event.preventDefault();
         setIsDragging(false);
 
-        const droppedFile = event.dataTransfer.files?.[0];
-        if (!droppedFile) return;
-
-        processFile(droppedFile);
+        const droppedFile =event.dataTransfer.files?.[0];
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+        if (droppedFile && allowedTypes.includes(droppedFile.type)) {
+            processFile(droppedFile);
+        }
     };
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
