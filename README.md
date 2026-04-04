@@ -16,6 +16,20 @@ A modern, production-ready template for building full-stack React applications u
 
 ## Getting Started
 
+### Environment Variables
+
+Copy the example env file and fill in your values:
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Description |
+|---|---|
+| `VITE_PUTER_WORKER_URL` | URL of your deployed Puter worker (e.g. `https://your-worker.puter.work`) |
+
+> **`.env.local` is git-ignored** — never commit secrets to the repository.
+
 ### Installation
 
 Install the dependencies:
