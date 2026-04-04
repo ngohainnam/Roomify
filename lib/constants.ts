@@ -25,32 +25,61 @@ export const UNAUTHORIZED_STATUSES = [401, 403];
 export const IMAGE_RENDER_DIMENSION = 1024;
 
 export const ROOMIFY_RENDER_PROMPT = `
-TASK: Convert the input 2D floor plan into a **photorealistic, top‑down 3D architectural render**.
+TASK:
+Convert the input 2D floor plan into a photorealistic, orthographic top-down 3D architectural render.
 
-STRICT REQUIREMENTS (do not violate):
-1) **REMOVE ALL TEXT**: Do not render any letters, numbers, labels, dimensions, or annotations. Floors must be continuous where text used to be.
-2) **GEOMETRY MUST MATCH**: Walls, rooms, doors, and windows must follow the exact lines and positions in the plan. Do not shift or resize.
-3) **TOP‑DOWN ONLY**: Orthographic top‑down view. No perspective tilt.
-4) **CLEAN, REALISTIC OUTPUT**: Crisp edges, balanced lighting, and realistic materials. No sketch/hand‑drawn look.
-5) **NO EXTRA CONTENT**: Do not add rooms, furniture, or objects that are not clearly indicated by the plan.
+PRIORITY ORDER (CRITICAL):
+1) Geometry accuracy (MOST IMPORTANT)
+2) Clean output (no noise/artifacts)
+3) Realistic materials and lighting
 
-STRUCTURE & DETAILS:
-- **Walls**: Extrude precisely from the plan lines. Consistent wall height and thickness.
-- **Doors**: Convert door swing arcs into open doors, aligned to the plan.
-- **Windows**: Convert thin perimeter lines into realistic glass windows.
+STRICT RULES (DO NOT VIOLATE):
+- DO NOT modify layout under any circumstance.
+- DO NOT infer or guess missing structures.
+- If any part of the plan is unclear → leave it empty rather than guessing.
 
-FURNITURE & ROOM MAPPING (only where icons/fixtures are clearly shown):
-- Bed icon → realistic bed with duvet and pillows.
-- Sofa icon → modern sectional or sofa.
-- Dining table icon → table with chairs.
-- Kitchen icon → counters with sink and stove.
-- Bathroom icon → toilet, sink, and tub/shower.
-- Office/study icon → desk, chair, and minimal shelving.
-- Porch/patio/balcony icon → outdoor seating or simple furniture (keep minimal).
-- Utility/laundry icon → washer/dryer and minimal cabinetry.
+GEOMETRY CONSTRAINTS:
+- Walls, rooms, doors, and windows must EXACTLY match the original 2D plan.
+- Preserve absolute positions, proportions, and alignment.
+- No shifting, scaling, bending, or distortion.
+- Straight lines must remain perfectly straight.
+- All walls must connect cleanly with no gaps or overlaps.
 
-STYLE & LIGHTING:
-- Lighting: bright, neutral daylight. High clarity and balanced contrast.
-- Materials: realistic wood/tile floors, clean walls, subtle shadows.
-- Finish: professional architectural visualization; no text, no watermarks, no logos.
+TEXT REMOVAL:
+- Remove ALL text, labels, dimensions, and annotations.
+- Replace text areas with continuous matching floor material.
+- No visible artifacts or marks where text existed.
+
+CAMERA:
+- Strict orthographic projection (top-down 90° view).
+- No perspective, no tilt, no angle.
+
+STRUCTURE:
+- Extrude walls vertically with consistent thickness and height.
+- Maintain clean, sharp edges.
+
+DOORS & WINDOWS:
+- Doors: convert arcs into correctly hinged open doors aligned to walls.
+- Windows: convert plan lines into clean glass elements aligned to walls.
+
+FURNITURE RULE (VERY IMPORTANT):
+- ONLY place furniture if a clear icon exists.
+- If no icon, then leave the space empty.
+- DO NOT guess or auto-fill interiors.
+
+STYLE:
+- Minimal, modern architectural visualization.
+- Neutral daylight lighting.
+- Realistic materials (wood, tile, glass).
+- Clean, noise-free, artifact-free rendering.
+
+NEGATIVE CONSTRAINTS:
+- No distortion
+- No hallucinated objects
+- No extra rooms
+- No sketch style
+- No blur, no noise, no warping
+
+FINAL GOAL:
+A clean, precise 3D representation that preserves the exact structure of the original 2D plan with zero layout deviation.
 `.trim();

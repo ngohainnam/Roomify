@@ -1,60 +1,52 @@
 import puter from "@heyputer/puter.js";
-import { ROOMIFY_RENDER_PROMPT } from "./constants";
+import {ROOMIFY_RENDER_PROMPT} from "./constants";
+import { getSettings, buildPromptEnhancement } from "./settings.action";
 
 export const fetchAsDataUrl = async (url: string): Promise<string> => {
-	const response = await fetch(url);
+  const response = await fetch(url);
 
-	if (!response.ok) {
-		throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-	}
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.statusText}`);
+  }
 
-	const blob = await response.blob();
+  const blob = await response.blob();
 
-	return await new Promise<string>((resolve, reject) => {
-		const reader = new FileReader();
-
-		reader.onloadend = () => {
-			if (typeof reader.result === "string") {
-				resolve(reader.result);
-				return;
-			}
-
-			reject(new Error("Failed to convert blob to Data URL"));
-		};
-
-		reader.onerror = () => {
-			reject(reader.error ?? new Error("FileReader failed while reading blob"));
-		};
-
-		reader.readAsDataURL(blob);
-	});
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 };
 
 export const generate3DView = async ({ sourceImage }: Generate3DViewParams) => {
-    const dataUrl = sourceImage.startsWith("data:") 
-    ? sourceImage 
-    : await fetchAsDataUrl(sourceImage);
+    const dataUrl = sourceImage.startsWith('data:')
+        ? sourceImage
+        : await fetchAsDataUrl(sourceImage);
 
-    const base64Data = dataUrl.split(",")[1];
-    const mimeType = dataUrl.split(";")[0].split(":")[1];
+    const base64Data = dataUrl.split(',')[1];
+    const mimeType = dataUrl.split(';')[0].split(':')[1];
 
-    if (!mimeType || !base64Data) throw new Error("Invalid source image payload");
+    if(!mimeType || !base64Data) throw new Error('Invalid source image payload');
 
-    const response = await puter.ai.txt2img(ROOMIFY_RENDER_PROMPT,{
+    const userSettings = await getSettings();
+    const enhancement = buildPromptEnhancement(userSettings);
+    const finalPrompt = ROOMIFY_RENDER_PROMPT + enhancement;
+
+    const response = await puter.ai.txt2img(finalPrompt, {
         provider: "gemini",
-        model: "gemini-2.5-flash-image-preview",
+        model: "google/gemini-2.5-flash-image",
         input_image: base64Data,
         input_image_mime_type: mimeType,
         ratio: { w: 1024, h: 1024 },
-    })
+    });
 
     const rawImageUrl = (response as HTMLImageElement).src ?? null;
-    
+
     if (!rawImageUrl) return { renderedImage: null, renderedPath: undefined };
 
-    const renderedImage = rawImageUrl.startsWith("data:")
-    ? rawImageUrl: await fetchAsDataUrl(rawImageUrl);
+    const renderedImage = rawImageUrl.startsWith('data:')
+    ? rawImageUrl : await fetchAsDataUrl(rawImageUrl);
 
     return { renderedImage, renderedPath: undefined };
-
 }
