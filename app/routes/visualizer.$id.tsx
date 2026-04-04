@@ -1,32 +1,61 @@
 import Button from "components/ui/Button";
-import { generat3DView } from "lib/ai.action";
+import { generate3DView } from "lib/ai.action";
+import { createProject, getProjectById } from "lib/puter.action";
 import { Box, Download, RefreshCcw, Share2, X } from "lucide-react";
-import { use, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useOutletContext, useParams } from "react-router";
 
 const VisualizerId = () => {
+  const { id } = useParams();
+  const { userId } = useOutletContext<AuthContext>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { initialImage, initialRender, name} = location.state || {};
+
+  // Navigation state passed from home page on fresh upload
+  const locationState = location.state as {
+    initialImage?: string;
+    initialRendered?: string | null;
+    name?: string;
+  } | null;
 
   const hasInitialGenerated = useRef(false);
 
+  const [project, setProject] = useState<DesignItem | null>(null);
+  const [isProjectLoading, setIsProjectLoading] = useState(true);
+
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentImage, setCurrentImage] = useState<string | null>(initialRender || null);
+  // Seed with navigation state immediately so image shows before worker fetch
+  const [currentImage, setCurrentImage] = useState<string | null>(
+    locationState?.initialRendered ?? locationState?.initialImage ?? null
+  );
 
   const handleBack = () => navigate("/");
 
-  const runGeneration = async () => {
-    if (!initialImage) return;
+  const runGeneration = async (item: DesignItem) => {
+    if (!id || !item.sourceImage) return;
 
     try {
       setIsProcessing(true);
-      const result = await generat3DView({ sourceImage: initialImage });
-
+      const result = await generate3DView({ sourceImage: item.sourceImage });
       if (result.renderedImage) {
         setCurrentImage(result.renderedImage);
 
         //upload the project with the rendered image
+        const updatedItem = {
+          ...item,
+          renderedImage: result.renderedImage,
+          renderedPath: result.renderedPath,
+          timestamp: Date.now(),
+          ownerId: item.ownerId ?? userId ?? null,
+          isPublic: item.isPublic ?? false,
+        }
+
+        const saved = await createProject({ item: updatedItem, visibility: "private" });
+
+        if (saved) {
+          setProject(saved);
+          setCurrentImage(saved.renderedImage || result.renderedImage);
+        }
       }
     } catch (e) {
       console.error("Failed to generate 3D view:", e);
@@ -36,16 +65,65 @@ const VisualizerId = () => {
   }
 
   useEffect(() => {
-    if (!initialImage || hasInitialGenerated.current) return;
+    let isMounted = true;
 
-    if (initialRender) {
-      setCurrentImage(initialRender);
+    const loadProject = async () => {
+      if (!id) {
+        setIsProjectLoading(false);
+        return;
+      }
+
+      setIsProjectLoading(true);
+
+      let fetchedProject = await getProjectById({ id });
+
+      // If worker doesn't have it yet, build a local stub from navigation state
+      if (!fetchedProject && locationState?.initialImage) {
+        fetchedProject = {
+          id: id!,
+          name: locationState.name ?? `Residence ${id}`,
+          sourceImage: locationState.initialImage,
+          renderedImage: locationState.initialRendered ?? undefined,
+          timestamp: Date.now(),
+        } as DesignItem;
+      }
+
+      if (!isMounted) return;
+
+      setProject(fetchedProject);
+      if (fetchedProject?.renderedImage) {
+        setCurrentImage(fetchedProject.renderedImage);
+      } else if (!currentImage && fetchedProject?.sourceImage) {
+        setCurrentImage(null); // let generation useEffect handle it
+      }
+      setIsProjectLoading(false);
+      hasInitialGenerated.current = false;
+    };
+
+    loadProject();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (
+      isProjectLoading ||
+      hasInitialGenerated.current ||
+      !project?.sourceImage
+    )
+      return;
+
+    if (project.renderedImage) {
+      setCurrentImage(project.renderedImage);
       hasInitialGenerated.current = true;
       return;
     }
+
     hasInitialGenerated.current = true;
-    runGeneration();
-  }, [initialImage, initialRender]);
+    void runGeneration(project);
+  }, [project, isProjectLoading]);
   
   return (
     <div className ="visualizer">
@@ -65,7 +143,7 @@ const VisualizerId = () => {
           <div className="panel-header">
             <div className="panel-meta">
               <p>Projects</p>
-              <h2>{'Untitled Project'}</h2>
+              <h2>{project?.name || `Residence ${id}`}</h2>
               <p className="note">Created by you</p>
             </div>
 
@@ -93,8 +171,8 @@ const VisualizerId = () => {
               <img src={currentImage} alt="AI Render" className="rendered-img" />
             ) : (
               <div className="render-placeholder">
-                {initialImage && (
-                  <img src={initialImage} alt="Original" className="render-fallback" />
+                {project?.sourceImage && (
+                  <img src={project.sourceImage} alt="Original" className="render-fallback" />
                 )}
               </div>
             )}
